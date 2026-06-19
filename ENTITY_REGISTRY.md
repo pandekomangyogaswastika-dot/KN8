@@ -554,9 +554,48 @@ Key Fields:
   approval_status enum(not_required|pending|approved)   approval_amount float   approved_by string
 
 ⚠️ Supplier adalah STRING saat ini — belum ada supplier master collection
+⚠️ Supplier: gunakan FK `supplier_id` → suppliers.id (Fase 3). `supplier_name`/
+   `supplier_npwp`/`supplier_contact` = SNAPSHOT saat PO dibuat (backward compat;
+   PO lama tanpa supplier_id tetap valid via string).
 ⚠️ PO tanpa approval → langsung buat wms_tasks (inbound). PO butuh approval → wms_tasks
    dibuat HANYA setelah /purchase-orders/{id}/approve (role_satisfies dari approval_rules).
+   /purchase-orders/{id}/reject → status 'rejected' (tanpa task).
 ⚠️ JANGAN BUAT: po, pembelian, supplier_orders, procurement
+```
+
+### suppliers
+```
+Collection:  suppliers          Prefix: sup_
+Router:      routers/suppliers.py
+Schema:      schemas.py → SupplierCreate, GenericPatch
+Component:   SuppliersView.jsx (Pembelian → Pemasok)
+Status:      active | inactive (soft delete via DELETE)
+Key Fields:
+  id, code (format: SUP-NNNNN), name, npwp, pic_name, phone, email, address,
+  city, goods_type (jenis barang), payment_term_code, entity_id, notes,
+  status, created_by, created_at, updated_at
+Endpoints:   GET/POST /suppliers · GET/PATCH/DELETE /suppliers/{id}
+⚠️ entity_id = default scoped (ent_ksc); supplier bisa dipakai lintas-entitas.
+⚠️ JANGAN BUAT: vendor, vendors, pemasok
+```
+
+### cash_transactions
+```
+Collection:  cash_transactions  Prefix: cash_
+Router:      routers/cash.py
+Schema:      schemas.py → CashTransactionCreate
+Component:   CashManagementView.jsx (Pembelian → Pengelolaan Kas)
+cash_type:   kas_kecil (per entitas) | kas_besar (gabungan, entity_id="all")
+direction:   in (masuk) | out (keluar)   ·   status: posted | void
+Key Fields:
+  id, number (format: CASH-NNNNN), cash_type, direction, amount, category,
+  description, entity_id, ref_type, ref_id, txn_date, status, created_by,
+  created_at, updated_at
+Endpoints:   GET /cash-transactions · GET /cash-transactions/summary ·
+             POST /cash-transactions · POST /cash-transactions/{id}/void
+Invarian:    saldo = Σ(amount where direction=in) − Σ(amount where direction=out)
+             untuk status≠void.
+⚠️ JANGAN BUAT: kas, petty_cash, cash
 ```
 
 ### document_templates

@@ -77,6 +77,9 @@ CONCEPTS = [
     Concept("approval_rules", "approval_rules", True, ["approval_matrix", "approvals"]),
     Concept("sales_orders", "sales_orders", True, ["orders", "penjualan", "customer_orders"]),
     Concept("purchase_orders", "purchase_orders", True, ["po", "pos", "pembelian"]),
+    # Fase 3 — Procurement (Supplier Master + Pengelolaan Kas)
+    Concept("suppliers", "suppliers", True, ["vendor", "vendors", "pemasok"]),
+    Concept("cash_transactions", "cash_transactions", True, ["kas", "petty_cash"]),
     Concept("wms_tasks", "wms_tasks", True, ["inbound_tasks", "outbound_tasks", "receiving_tasks"]),
     Concept("document_templates", "document_templates", True, ["templates"]),
     Concept("permission_settings", "permission_settings", True, []),

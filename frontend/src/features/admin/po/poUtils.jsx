@@ -10,6 +10,7 @@ export function getStatusBadge(status) {
     completed:        { label: "Completed",         cls: "bg-green-100 text-green-700" },
     partial:          { label: "Partial",           cls: "bg-orange-100 text-orange-700" },
     cancelled:        { label: "Cancelled",         cls: "bg-gray-200 text-gray-500" },
+    rejected:         { label: "Rejected",          cls: "bg-red-100 text-red-700" },
   };
   const b = statusMap[status] || { label: status, cls: "bg-gray-200 text-gray-700" };
   return (

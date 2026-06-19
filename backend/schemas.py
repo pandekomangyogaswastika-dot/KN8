@@ -254,7 +254,8 @@ class POItemCreate(BaseModel):
 
 
 class PurchaseOrderCreate(BaseModel):
-    supplier_name: str
+    supplier_id: str = ""             # Fase 3 — FK ke suppliers (opsional; fallback manual)
+    supplier_name: str = ""           # snapshot/manual (backward compat bila tanpa supplier_id)
     supplier_contact: str = ""
     warehouse_id: str
     items: List[POItemCreate]
@@ -262,6 +263,36 @@ class PurchaseOrderCreate(BaseModel):
     notes: str = ""
     created_by: str = "Admin"
     entity_id: str = ""
+
+
+# ─── Procurement Schemas (Fase 3 — Supplier Master + Pengelolaan Kas) ─────────
+
+class SupplierCreate(BaseModel):
+    name: str
+    npwp: str = ""
+    pic_name: str = ""
+    phone: str = ""
+    email: str = ""
+    address: str = ""
+    city: str = ""
+    goods_type: str = ""              # jenis barang yang dipasok (benang/kain/bahan printing)
+    payment_term_code: str = ""
+    entity_id: str = ""
+    notes: str = ""
+    created_by: str = "Admin"
+
+
+class CashTransactionCreate(BaseModel):
+    cash_type: str = "kas_kecil"      # kas_kecil (per entitas) | kas_besar (gabungan)
+    direction: str = "out"            # in (masuk) | out (keluar)
+    amount: float
+    category: str = ""                # pembelian | operasional | gaji | lain
+    description: str = ""
+    entity_id: str = ""               # untuk kas_kecil; kas_besar dipaksa "all"
+    ref_type: str = ""                # purchase_order | manual | ...
+    ref_id: str = ""
+    txn_date: str = ""                # ISO; default = sekarang
+    created_by: str = "Admin"
 
 
 class POReceiveItem(BaseModel):

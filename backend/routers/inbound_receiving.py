@@ -64,13 +64,24 @@ async def scan_receive_item(
     # Update received qty
     new_received_qty = task.get("received_qty", 0.0) + payload.actual_qty
     expected_qty = task.get("expected_qty", 0.0)
-    
-    # Check if qty exceeds expected (should not happen, but validate)
-    if new_received_qty > expected_qty:
+
+    # Fase 3 — Toleransi kedatangan ±X% (configurable, default 2%). Over-receipt
+    # dalam toleransi DITERIMA (mis. benang); melebihi toleransi → ditolak (butuh
+    # eskalasi/penyesuaian manager via /escalate).
+    from services.config_service import get_effective_settings
+    po_ctx = await db.purchase_orders.find_one({"id": task.get("po_id")}, {"_id": 0, "entity_id": 1})
+    settings = await get_effective_settings((po_ctx or {}).get("entity_id"))
+    tol_pct = float((settings.get("purchasing", {}) or {}).get("receive_tolerance_percent", 2.0) or 0)
+    tolerance_qty = round(expected_qty * (1 + tol_pct / 100.0), 4)
+    if new_received_qty > tolerance_qty + 1e-6:
         raise HTTPException(
             status_code=400,
-            detail=f"Qty received ({new_received_qty}) melebihi expected ({expected_qty})"
+            detail=(f"Qty terima ({new_received_qty}) melebihi toleransi +{tol_pct:g}% "
+                    f"dari PO ({expected_qty}, maks {tolerance_qty:g}). "
+                    f"Gunakan Eskalasi untuk penyesuaian manager.")
         )
+    variance_pct = round(((new_received_qty - expected_qty) / expected_qty * 100.0), 2) if expected_qty else 0.0
+    within_tolerance = abs(variance_pct) <= tol_pct
     
     # Log scan entry
     scan_entry = {
@@ -87,6 +98,9 @@ async def scan_receive_item(
     
     update_data = {
         "received_qty": new_received_qty,
+        "receive_variance_percent": variance_pct,
+        "receive_within_tolerance": within_tolerance,
+        "receive_tolerance_percent": tol_pct,
         "batch": payload.batch or task.get("batch", ""),
         "lot": payload.lot or task.get("lot", ""),
         "roll_id": payload.roll_id or task.get("roll_id", ""),

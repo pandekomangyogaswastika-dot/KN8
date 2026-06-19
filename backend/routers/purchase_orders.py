@@ -65,6 +65,25 @@ async def create_purchase_order(payload: PurchaseOrderCreate, request: Request) 
     warehouse = safe_doc(await db.warehouses.find_one({"id": payload.warehouse_id}, {"_id": 0}))
     if not warehouse:
         raise HTTPException(status_code=404, detail="Warehouse tidak ditemukan")
+
+    # Fase 3 — resolve supplier master (FK) → snapshot. Fallback ke supplier_name manual.
+    supplier_id = ""
+    supplier_name = (payload.supplier_name or "").strip()
+    supplier_contact = payload.supplier_contact
+    supplier_npwp = ""
+    if payload.supplier_id:
+        supplier = safe_doc(await db.suppliers.find_one({"id": payload.supplier_id}, {"_id": 0}))
+        if not supplier:
+            raise HTTPException(status_code=404, detail="Supplier tidak ditemukan")
+        supplier_id = supplier["id"]
+        supplier_name = supplier.get("name", "")
+        supplier_npwp = supplier.get("npwp", "")
+        if not supplier_contact:
+            pic = supplier.get("pic_name", "")
+            phone = supplier.get("phone", "")
+            supplier_contact = " | ".join([x for x in [pic, phone] if x])
+    if not supplier_name:
+        raise HTTPException(status_code=400, detail="Supplier wajib dipilih atau diisi")
     
     # Validate products and calculate total
     products = {p["id"]: p for p in await db.products.find({}, {"_id": 0}).to_list(1000)}
@@ -104,8 +123,10 @@ async def create_purchase_order(payload: PurchaseOrderCreate, request: Request) 
     po = {
         "id": new_id("po"),
         "po_number": po_number,
-        "supplier_name": payload.supplier_name,
-        "supplier_contact": payload.supplier_contact,
+        "supplier_id": supplier_id,
+        "supplier_name": supplier_name,
+        "supplier_contact": supplier_contact,
+        "supplier_npwp": supplier_npwp,
         "warehouse_id": payload.warehouse_id,
         "warehouse_name": warehouse["name"],
         "warehouse_city": warehouse.get("city", ""),
@@ -133,7 +154,8 @@ async def create_purchase_order(payload: PurchaseOrderCreate, request: Request) 
 
     await audit(actor["name"], "po_created", "purchase_order", po["id"], {
         "po_number": po_number,
-        "supplier": payload.supplier_name,
+        "supplier": supplier_name,
+        "supplier_id": supplier_id,
         "total_amount": total_amount,
         "approval_required": needs_approval,
         "required_role": appr["required_role"],
@@ -167,6 +189,39 @@ async def approve_purchase_order(po_id: str, request: Request) -> Dict[str, Any]
     await _create_inbound_tasks_for_po(updated)
     await audit(actor["name"], "po_approved", "purchase_order", po_id,
                 {"po_number": po.get("po_number"), "total_amount": po.get("total_amount")})
+    return safe_doc(updated)
+
+
+@router.post("/purchase-orders/{po_id}/reject")
+async def reject_purchase_order(po_id: str, request: Request) -> Dict[str, Any]:
+    """Fase 3 — tolak PO yang menunggu approval (role dinamis dari matriks).
+    PO → status 'rejected'; tidak ada inbound task yang dibuat."""
+    actor = await current_user(request)
+    po = safe_doc(await db.purchase_orders.find_one({"id": po_id}, {"_id": 0}))
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase Order tidak ditemukan")
+    if po.get("status") != "waiting_approval":
+        raise HTTPException(status_code=409, detail=f"PO status '{po.get('status')}' tidak menunggu approval")
+    required = po.get("required_approval_role")
+    if not role_satisfies(actor.get("role"), required):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Reject PO butuh role minimal '{required}'. Role Anda: '{actor.get('role')}'.")
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    reason = (body or {}).get("reason", "")
+    updated = await db.purchase_orders.find_one_and_update(
+        {"id": po_id},
+        {"$set": {"status": "rejected", "approval_status": "rejected",
+                  "rejected_by": actor["name"], "rejection_reason": reason,
+                  "updated_at": now_iso()}},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER
+    )
+    await audit(actor["name"], "po_rejected", "purchase_order", po_id,
+                {"po_number": po.get("po_number"), "reason": reason})
     return safe_doc(updated)
 
 

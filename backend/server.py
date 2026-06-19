@@ -20,7 +20,8 @@ from routers import (
     reporting, audit, cycle_count, onboarding, label_printer, transfers,
     purchase_orders, inbound_receiving, outbound_picking,
     entities, notifications, settings, price_approvals, pegging, tax_invoices,
-    sales_returns, special_orders, approval_rules, approval_requests
+    sales_returns, special_orders, approval_rules, approval_requests,
+    suppliers, cash
 )
 
 
@@ -356,6 +357,66 @@ async def ensure_config_defaults() -> None:
     await seed_config_defaults()
 
 
+# ─── Fase 3: Procurement (Supplier Master + Pengelolaan Kas) ─────────────────
+
+async def seed_procurement() -> None:
+    """Seed master supplier + contoh transaksi kas (idempotent). Backfill PO.supplier_id."""
+    if await db.suppliers.count_documents({}) == 0:
+        base = [
+            {"name": "Cirebon Craft", "npwp": "21.111.222.3-401.000", "pic_name": "Pak Wahyu",
+             "phone": "081234500001", "city": "Cirebon", "goods_type": "Batik & Kain Cap", "entity_id": "ent_ksc"},
+            {"name": "NTT Weaving Co", "npwp": "22.222.333.4-402.000", "pic_name": "Ibu Agnes",
+             "phone": "082345600002", "city": "Kupang", "goods_type": "Tenun Ikat", "entity_id": "ent_ksc"},
+            {"name": "Solo Weave", "npwp": "23.333.444.5-403.000", "pic_name": "Pak Joko",
+             "phone": "085012300003", "city": "Solo", "goods_type": "Lurik & Benang", "entity_id": "ent_ksc"},
+            {"name": "Palembang Silk House", "npwp": "24.444.555.6-404.000", "pic_name": "Ibu Sri",
+             "phone": "081299900004", "city": "Palembang", "goods_type": "Songket & Benang Emas", "entity_id": "ent_ksc"},
+            {"name": "Toba Craft", "npwp": "", "pic_name": "Pak Sahat",
+             "phone": "081377700005", "city": "Medan", "goods_type": "Ulos", "entity_id": "ent_kanda"},
+        ]
+        docs = []
+        for i, s in enumerate(base, start=1):
+            docs.append({
+                "id": new_id("sup"), "code": f"SUP-{i:05d}", "name": s["name"],
+                "npwp": s["npwp"], "pic_name": s["pic_name"], "phone": s["phone"],
+                "email": "", "address": "", "city": s["city"], "goods_type": s["goods_type"],
+                "payment_term_code": "NET30", "entity_id": s["entity_id"], "notes": "",
+                "status": "active", "created_by": "seed",
+                "created_at": now_iso(), "updated_at": now_iso(),
+            })
+        await db.suppliers.insert_many(docs)
+
+    # Backfill purchase_orders.supplier_id by name match (idempotent)
+    sup_by_name = {s["name"]: s["id"] for s in await db.suppliers.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(500)}
+    async for po in db.purchase_orders.find({"$or": [{"supplier_id": {"$exists": False}}, {"supplier_id": ""}]}, {"_id": 0, "id": 1, "supplier_name": 1}):
+        sid = sup_by_name.get(po.get("supplier_name", ""))
+        if sid:
+            await db.purchase_orders.update_one({"id": po["id"]}, {"$set": {"supplier_id": sid}})
+
+    if await db.cash_transactions.count_documents({}) == 0:
+        examples = [
+            {"cash_type": "kas_besar", "direction": "in",  "amount": 100000000, "category": "modal",
+             "description": "Setoran modal awal kas besar", "entity_id": "all"},
+            {"cash_type": "kas_kecil", "direction": "in",  "amount": 10000000,  "category": "transfer",
+             "description": "Top-up kas kecil PT Kain Suka Cita", "entity_id": "ent_ksc"},
+            {"cash_type": "kas_kecil", "direction": "out", "amount": 1500000,   "category": "operasional",
+             "description": "Biaya operasional gudang", "entity_id": "ent_ksc"},
+            {"cash_type": "kas_kecil", "direction": "out", "amount": 750000,    "category": "pembelian",
+             "description": "Pembelian bahan printing", "entity_id": "ent_ksc"},
+            {"cash_type": "kas_kecil", "direction": "in",  "amount": 5000000,   "category": "transfer",
+             "description": "Top-up kas kecil CV Kanda Suka", "entity_id": "ent_kanda"},
+        ]
+        docs = []
+        for i, e in enumerate(examples, start=1):
+            docs.append({
+                "id": new_id("cash"), "number": f"CASH-{i:05d}", **e,
+                "ref_type": "manual", "ref_id": "", "txn_date": now_iso(),
+                "status": "posted", "created_by": "seed",
+                "created_at": now_iso(), "updated_at": now_iso(),
+            })
+        await db.cash_transactions.insert_many(docs)
+
+
 # ─── App factory ─────────────────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -369,6 +430,7 @@ async def lifespan(app: FastAPI):
     await backfill_inventory_owner()
     await ensure_inventory_rolls()
     await ensure_config_defaults()
+    await seed_procurement()
     await seed_initial_notifications()
     # Sub-fase 1.7 — init object storage (best-effort; tak menggagalkan startup)
     try:
@@ -398,7 +460,8 @@ for module in [
     reporting, audit, cycle_count, onboarding, label_printer, transfers,
     purchase_orders, inbound_receiving, outbound_picking,
     entities, notifications, settings, price_approvals, pegging, tax_invoices,
-    sales_returns, special_orders, approval_rules, approval_requests
+    sales_returns, special_orders, approval_rules, approval_requests,
+    suppliers, cash
 ]:
     app.include_router(module.router)
 

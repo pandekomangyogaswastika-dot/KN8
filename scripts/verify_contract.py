@@ -56,6 +56,9 @@ CANONICAL_COLLECTIONS = {
     # ── Sub-fase 1.11 (Returns & Barang Sisa) ──
     "sales_returns",
     "special_orders",
+    # ── Fase 3 (Procurement: Supplier Master + Pengelolaan Kas) ──
+    "suppliers",
+    "cash_transactions",
 }
 
 # ── Alias TERLARANG → koleksi kanonik (dari bagian FORBIDDEN ENTITY_REGISTRY) ──
@@ -87,6 +90,10 @@ DANGEROUS_ALIASES = {
     # purchase_orders
     "po": "purchase_orders", "pos": "purchase_orders", "pembelian": "purchase_orders",
     "supplier_orders": "purchase_orders", "procurement": "purchase_orders",
+    # suppliers (Fase 3)
+    "vendor": "suppliers", "vendors": "suppliers", "pemasok": "suppliers",
+    # cash_transactions (Fase 3)
+    "kas": "cash_transactions", "cash": "cash_transactions", "petty_cash": "cash_transactions",
     # invoices
     "bills": "invoices", "tagihan": "invoices", "faktur": "invoices",
     # document_templates

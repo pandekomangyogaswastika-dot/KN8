@@ -57,6 +57,7 @@ async def clear_collections():
         "business_entities", "notifications",
         "system_settings", "payment_terms", "approval_rules",
         "price_approvals", "shipments", "tax_invoices",
+        "suppliers", "cash_transactions",
     ]
     for col in cols:
         await db[col].delete_many({})
@@ -1792,6 +1793,142 @@ async def seed_special_order_examples():
     return made
 
 
+async def seed_purchase_approval_examples():
+    """Fase 3 — contoh PO untuk alur Approval Pembelian (waiting/approved/rejected).
+    PO bernilai > Rp 100 jt → butuh approval role 'manager' (sesuai approval_rules)."""
+    # PO-00007 — MENUNGGU approval (belum ada inbound task; task baru dibuat saat approve)
+    await db.purchase_orders.insert_one({
+        "id": "po_007", "po_number": "PO-00007",
+        "supplier_name": "Palembang Silk House", "supplier_contact": "Ibu Sri | 081299900004",
+        "supplier_npwp": "24.444.555.6-404.000",
+        "warehouse_id": "wh_jakarta", "status": "waiting_approval",
+        "approval_required": True, "required_approval_role": "manager", "approval_status": "pending",
+        "items": [
+            {"product_id": "prod_songket_palembang", "sku": "SGK-PLB-001",
+             "product_name": "Songket Palembang Benang Emas",
+             "quantity": 320.0, "received_qty": 0.0, "unit": "meter", "price": 420000, "status": "pending"},
+        ],
+        "total_amount": 134400000.0,
+        "expected_delivery_date": ago(days=-7),
+        "notes": "Restock songket Q2 — menunggu persetujuan manajemen",
+        "created_by": "Admin", "created_at": ago(days=2), "updated_at": ago(days=2),
+    })
+    # PO-00008 — DITOLAK
+    await db.purchase_orders.insert_one({
+        "id": "po_008", "po_number": "PO-00008",
+        "supplier_name": "Bali Weave Studio", "supplier_contact": "Ibu Kadek | 081388800006",
+        "supplier_npwp": "26.666.777.8-406.000",
+        "warehouse_id": "wh_surabaya", "status": "rejected",
+        "approval_required": True, "required_approval_role": "manager", "approval_status": "rejected",
+        "rejected_by": "Sari Dewi", "rejection_reason": "Harga di atas anggaran, negosiasi ulang.",
+        "items": [
+            {"product_id": "prod_tenun_ikat", "sku": "TNI-GRGD-001",
+             "product_name": "Tenun Ikat Garuda Premium",
+             "quantity": 700.0, "received_qty": 0.0, "unit": "meter", "price": 200000, "status": "cancelled"},
+        ],
+        "total_amount": 140000000.0,
+        "expected_delivery_date": ago(days=-10),
+        "notes": "Permintaan tenun ikat partai besar",
+        "created_by": "Admin", "created_at": ago(days=5), "updated_at": ago(days=4),
+    })
+    # PO-00009 — DISETUJUI (status pending, ada inbound task menunggu receiving)
+    task9_id = new_id("wms")
+    await db.purchase_orders.insert_one({
+        "id": "po_009", "po_number": "PO-00009",
+        "supplier_name": "Cirebon Craft", "supplier_contact": "Pak Wahyu | 081234500001",
+        "supplier_npwp": "21.111.222.3-401.000",
+        "warehouse_id": "wh_jakarta", "status": "pending",
+        "approval_required": True, "required_approval_role": "manager", "approval_status": "approved",
+        "approved_by": "Sari Dewi", "approved_at": ago(days=3),
+        "items": [
+            {"product_id": "prod_batik_mega", "sku": "BTK-MEGA-001",
+             "product_name": "Batik Mega Mendung Premium",
+             "quantity": 800.0, "received_qty": 0.0, "unit": "meter", "price": 165000,
+             "status": "pending", "inbound_task_id": task9_id},
+        ],
+        "total_amount": 132000000.0,
+        "expected_delivery_date": ago(days=-5),
+        "notes": "Disetujui manajemen — menunggu kedatangan barang",
+        "created_by": "Admin", "created_at": ago(days=4), "updated_at": ago(days=3),
+    })
+    await db.wms_tasks.insert_one({
+        "id": task9_id, "flow_type": "inbound", "source_type": "purchase_order", "task_subtype": "receiving",
+        "po_id": "po_009", "po_number": "PO-00009",
+        "product_id": "prod_batik_mega", "sku": "BTK-MEGA-001",
+        "product_name": "Batik Mega Mendung Premium",
+        "warehouse_id": "wh_jakarta", "warehouse_name": "Gudang Jakarta Utara",
+        "expected_qty": 800.0, "received_qty": 0.0, "quantity": 0.0,
+        "unit": "meter", "status": "pending", "supplier_name": "Cirebon Craft",
+        "bin_id": "", "batch": "", "lot": "", "scan_log": [], "escalation": None,
+        "created_at": ago(days=3), "updated_at": ago(days=3),
+    })
+    print("✅ Purchase approval examples seeded (PO-00007 waiting, PO-00008 rejected, PO-00009 approved)")
+
+
+async def seed_suppliers():
+    """Fase 3 — master supplier (mencakup semua supplier_name di PO)."""
+    suppliers = [
+        {"name": "Cirebon Craft",        "npwp": "21.111.222.3-401.000", "pic_name": "Pak Wahyu",
+         "phone": "081234500001", "city": "Cirebon",   "goods_type": "Batik & Kain Cap",        "entity_id": "ent_ksc"},
+        {"name": "NTT Weaving Co",        "npwp": "22.222.333.4-402.000", "pic_name": "Ibu Agnes",
+         "phone": "082345600002", "city": "Kupang",    "goods_type": "Tenun Ikat",              "entity_id": "ent_ksc"},
+        {"name": "Solo Weave",            "npwp": "23.333.444.5-403.000", "pic_name": "Pak Joko",
+         "phone": "085012300003", "city": "Solo",      "goods_type": "Lurik & Benang",          "entity_id": "ent_ksc"},
+        {"name": "Palembang Silk House",  "npwp": "24.444.555.6-404.000", "pic_name": "Ibu Sri",
+         "phone": "081299900004", "city": "Palembang", "goods_type": "Songket & Benang Emas",   "entity_id": "ent_ksc"},
+        {"name": "Toba Craft",            "npwp": "",                     "pic_name": "Pak Sahat",
+         "phone": "081377700005", "city": "Medan",     "goods_type": "Ulos",                    "entity_id": "ent_kanda"},
+        {"name": "Bali Weave Studio",     "npwp": "26.666.777.8-406.000", "pic_name": "Ibu Kadek",
+         "phone": "081388800006", "city": "Denpasar",  "goods_type": "Endek & Tenun Bali",      "entity_id": "ent_kanda"},
+    ]
+    docs = []
+    for i, s in enumerate(suppliers, start=1):
+        docs.append({
+            "id": new_id("sup"), "code": f"SUP-{i:05d}", "name": s["name"],
+            "npwp": s["npwp"], "pic_name": s["pic_name"], "phone": s["phone"],
+            "email": f"sales@{s['name'].lower().replace(' ', '')}.co.id", "address": "",
+            "city": s["city"], "goods_type": s["goods_type"], "payment_term_code": "NET30",
+            "entity_id": s["entity_id"], "notes": "", "status": "active", "created_by": "seed",
+            "created_at": ago(days=120), "updated_at": ago(days=120),
+        })
+    await db.suppliers.insert_many(docs)
+    # Link existing PO supplier_name → supplier_id (FK)
+    sup_by_name = {d["name"]: d["id"] for d in docs}
+    for name, sid in sup_by_name.items():
+        await db.purchase_orders.update_many({"supplier_name": name}, {"$set": {"supplier_id": sid}})
+    print(f"✅ Suppliers seeded ({len(docs)}) + PO supplier_id linked")
+
+
+async def seed_cash_transactions():
+    """Fase 3 — contoh transaksi kas kecil (per entitas) + kas besar (gabungan)."""
+    examples = [
+        {"cash_type": "kas_besar", "direction": "in",  "amount": 100000000, "category": "modal",
+         "description": "Setoran modal awal kas besar grup", "entity_id": "all",      "days": 60},
+        {"cash_type": "kas_kecil", "direction": "in",  "amount": 10000000,  "category": "transfer",
+         "description": "Top-up kas kecil PT Kain Suka Cita", "entity_id": "ent_ksc",  "days": 45},
+        {"cash_type": "kas_kecil", "direction": "out", "amount": 1500000,   "category": "operasional",
+         "description": "Biaya operasional gudang Bandung",   "entity_id": "ent_ksc",  "days": 30},
+        {"cash_type": "kas_kecil", "direction": "out", "amount": 750000,    "category": "pembelian",
+         "description": "Pembelian bahan printing",           "entity_id": "ent_ksc",  "days": 20},
+        {"cash_type": "kas_kecil", "direction": "in",  "amount": 5000000,   "category": "transfer",
+         "description": "Top-up kas kecil CV Kanda Suka",     "entity_id": "ent_kanda","days": 15},
+        {"cash_type": "kas_kecil", "direction": "out", "amount": 1200000,   "category": "operasional",
+         "description": "Biaya kirim sample ke customer",     "entity_id": "ent_kanda","days": 7},
+    ]
+    docs = []
+    for i, e in enumerate(examples, start=1):
+        docs.append({
+            "id": new_id("cash"), "number": f"CASH-{i:05d}",
+            "cash_type": e["cash_type"], "direction": e["direction"], "amount": float(e["amount"]),
+            "category": e["category"], "description": e["description"], "entity_id": e["entity_id"],
+            "ref_type": "manual", "ref_id": "", "txn_date": ago(days=e["days"]),
+            "status": "posted", "created_by": "seed",
+            "created_at": ago(days=e["days"]), "updated_at": ago(days=e["days"]),
+        })
+    await db.cash_transactions.insert_many(docs)
+    print(f"✅ Cash transactions seeded ({len(docs)})")
+
+
 async def seed_all(db_instance=None):
     """
     Run the complete seed pipeline. Can be called from an external module
@@ -1851,6 +1988,10 @@ async def seed_all(db_instance=None):
     await seed_sales_returns_examples()
     # Sub-fase 1.12 — Special Orders
     await seed_special_order_examples()
+    # Fase 3 — Procurement: master supplier (+ link PO) + pengelolaan kas
+    await seed_purchase_approval_examples()
+    await seed_suppliers()
+    await seed_cash_transactions()
     print("\n✅ All realistic seed data inserted successfully!")
 
     # Compute summary counts

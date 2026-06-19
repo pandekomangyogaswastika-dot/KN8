@@ -14,6 +14,15 @@
 
 ---
 
+> ✅ **FASE 3 (PURCHASING / PROCUREMENT) — SELESAI & TESTED (Session #027):** Implementasi modul Pembelian sesuai roadmap `KN_DEVELOPMENT_PLAN_FROM_ASSESSMENT.md`:
+> - **3.1 Master Supplier** (`suppliers`, prefix sup_): CRUD lengkap (router `routers/suppliers.py`, `SuppliersView.jsx`, menu Pembelian→Pemasok). Field: code SUP-NNNNN, name, npwp, pic_name, phone, email, city, goods_type, payment_term_code, entity_id, status. Seed 6 supplier.
+> - **3.1b PO ↔ Supplier FK**: `purchase_orders.supplier_id` (FK) + snapshot `supplier_name`/`supplier_npwp`/`supplier_contact` (backward compat). PO form punya dropdown supplier master (searchable) + fallback manual.
+> - **3.2 Approval Pembelian** (`PurchaseApprovalView.jsx`, menu Pembelian→Approval): workflow approve/reject bertingkat (role dinamis dari `approval_rules`; PO > Rp 100jt butuh manager). Endpoint baru `/purchase-orders/{id}/reject`. Seed demo PO-00007 (waiting), PO-00008 (rejected), PO-00009 (approved).
+> - **3.3 Toleransi Kedatangan ±2%**: config `purchasing.receive_tolerance_percent` (default 2.0) di `config_service`. Inbound scan-receive terima over-receipt dalam toleransi, tolak bila melebihi (butuh eskalasi). Metadata `receive_variance_percent`/`receive_within_tolerance` di task.
+> - **3.4 Pengelolaan Kas** (`cash_transactions`, prefix cash_): router `routers/cash.py` + `CashManagementView.jsx` (menu Pembelian→Pengelolaan Kas). Kas kecil (per entitas) + kas besar (gabungan), in/out, saldo per entitas, void. Endpoint `/cash-transactions` + `/summary`. Seed 6 transaksi.
+> - **DEFERRED:** 3.5 BOM Printing (`bom_printing`) — tetap Coming Soon (di luar acceptance criteria Fase 3).
+> - **Gates HIJAU:** seed_reset 103/0/0 · verify_contract OK · api_contract 0 ERROR · ux_audit 0 ERROR · endpoint_sweep 0×5xx · esbuild bersih. ENTITY_REGISTRY + verify_contract CANONICAL + data_integrity Concepts diupdate (suppliers, cash_transactions). Forbidden alias: vendor/vendors/kas/petty_cash.
+
 ---
 
 ## ⏸️ Session #026 — UX Backlog + Phase 1.11/1.12 Seed (18 Jun 2026) — HANDOFF TO OPUS

@@ -1,38 +1,30 @@
 [
   {
-    "content": "BUG-01: Refactor PriceApprovals.jsx - ALREADY FIXED (319 lines)",
+    "content": "Fase 3.1: Master Supplier — backend + frontend SuppliersView + nav (DONE)",
     "status": "completed"
   },
   {
-    "content": "BUG #3: Clarify navigation vs page tab pattern (Approval Harga Khusus)",
+    "content": "Fase 3.1b: PO ↔ supplier FK + PO form supplier dropdown (DONE)",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 3.2: Purchase Approval — backend reject + frontend + seed demo (DONE)",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 3.3: Toleransi kedatangan ±2% — config + inbound tolerance (DONE)",
+    "status": "completed"
+  },
+  {
+    "content": "Fase 3.4: Pengelolaan Kas — backend + frontend CashManagementView + nav (DONE)",
+    "status": "completed"
+  },
+  {
+    "content": "Gates all green (103 PASS) + plan.md/ENTITY_REGISTRY updated",
+    "status": "completed"
+  },
+  {
+    "content": "End-to-end testing via testing_agent_v3 + fix issues",
     "status": "in_progress"
-  },
-  {
-    "content": "BUG #6: Inconsistent page titles/kicker across pages",
-    "status": "pending"
-  },
-  {
-    "content": "BUG #7: Tab badge count alignment/positioning",
-    "status": "pending"
-  },
-  {
-    "content": "UX W1: Add tabular-nums to money/qty columns (14 files)",
-    "status": "pending"
-  },
-  {
-    "content": "UX W2: Replace native <select> with shadcn Select (18 files)",
-    "status": "pending"
-  },
-  {
-    "content": "UX W4: Add <Tooltip> to charts (2 files: OrdersView, InventoryStockView)",
-    "status": "pending"
-  },
-  {
-    "content": "NAV-01: Add data-testid to nav items",
-    "status": "pending"
-  },
-  {
-    "content": "Run testing agent + verify all gates green",
-    "status": "pending"
   }
 ]

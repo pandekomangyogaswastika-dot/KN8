@@ -58,6 +58,9 @@ export const PAGE_META = {
   "approval-inbox":       { kicker: "Approvals",      title: "Approval Inbox" },
   "approval-rules":       { kicker: "Settings",       title: "Approval Rules" },
   purchasing:             { kicker: "Pembelian",      title: "Pesanan Pembelian (PO)" },
+  suppliers:              { kicker: "Pembelian",      title: "Master Pemasok (Supplier)" },
+  "purchase-approval":    { kicker: "Pembelian",      title: "Approval Pembelian" },
+  "cash-management":      { kicker: "Pembelian",      title: "Pengelolaan Kas" },
   operations:             { kicker: "Gudang",         title: "Operasi Gudang (WMS)" },
   "inventory-board":      { kicker: "Gudang",         title: "Status Stok & ATP" },
   "interco-transfers":    { kicker: "Gudang",         title: "Transfer Antar-Entitas" },
@@ -152,10 +155,10 @@ const NAV_STRUCTURE = [
     roles:      ["admin", "manager"],
     items: [
       { id: "purchasing",             label: "Pesanan Pembelian (PO)", icon: ClipboardList, roles: ["admin", "manager"] },
-      { id: "cs-suppliers",           label: "Pemasok (Supplier)",      icon: Truck,         roles: ["admin", "manager"], comingSoon: true },
-      { id: "cs-purchase-approval",   label: "Approval Pembelian",      icon: BadgePercent,  roles: ["admin", "manager"], comingSoon: true },
+      { id: "suppliers",              label: "Pemasok (Supplier)",      icon: Truck,         roles: ["admin", "manager"] },
+      { id: "purchase-approval",      label: "Approval Pembelian",      icon: BadgePercent,  roles: ["admin", "manager"] },
       { id: "cs-bom",                 label: "BOM Printing",            icon: Printer,       roles: ["admin"],            comingSoon: true },
-      { id: "cs-kas",                 label: "Pengelolaan Kas",         icon: Wallet,        roles: ["admin", "manager"], comingSoon: true },
+      { id: "cash-management",        label: "Pengelolaan Kas",         icon: Wallet,        roles: ["admin", "manager"] },
     ],
   },
 

@@ -10,10 +10,23 @@ import KNSelect from "../../../components/KNSelect";
 export default function POCreateForm({
   formData, setFormData,
   newItem, setNewItem,
-  products, warehouses,
+  products, warehouses, suppliers = [],
   onSubmit, onCancel,
   onAddItem, onRemoveItem,
 }) {
+  const activeSuppliers = suppliers.filter((s) => s.status !== "inactive");
+  function handleSupplierSelect(v) {
+    if (v) {
+      const s = suppliers.find((x) => x.id === v);
+      setFormData({
+        ...formData, supplier_id: v,
+        supplier_name: s?.name || "",
+        supplier_contact: s ? [s.pic_name, s.phone].filter(Boolean).join(" · ") : formData.supplier_contact,
+      });
+    } else {
+      setFormData({ ...formData, supplier_id: "", supplier_name: "" });
+    }
+  }
   return (
     <div data-testid="create-po-form" className="section-card mb-3">
       <div className="section-head">
@@ -23,13 +36,27 @@ export default function POCreateForm({
         {/* Header fields */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[10.5px] font-semibold text-[#6B6B73] mb-1">Supplier Name *</label>
-            <input data-testid="supplier-name-input" type="text" value={formData.supplier_name}
-              onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })}
-              className="field" placeholder="PT Supplier Textile" />
+            <label className="block text-[10.5px] font-semibold text-[#6B6B73] mb-1">Supplier (Master)</label>
+            <KNSelect data-testid="supplier-master-select" value={formData.supplier_id || ""}
+              onValueChange={handleSupplierSelect}
+              className="field" placeholder="Pilih dari master / isi manual"
+              options={[
+                { value: "", label: "— Isi manual / tanpa master —" },
+                ...activeSuppliers.map((s) => ({ value: s.id, label: `${s.code} · ${s.name}` })),
+              ]}
+            />
           </div>
           <div>
-            <label className="block text-[10.5px] font-semibold text-[#6B6B73] mb-1">Supplier Contact</label>
+            <label className="block text-[10.5px] font-semibold text-[#6B6B73] mb-1">
+              Nama Supplier {!formData.supplier_id && <span className="req">*</span>}
+            </label>
+            <input data-testid="supplier-name-input" type="text" value={formData.supplier_name}
+              disabled={!!formData.supplier_id}
+              onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })}
+              className="field disabled:bg-gray-100 disabled:text-gray-500" placeholder="PT Supplier Textile" />
+          </div>
+          <div>
+            <label className="block text-[10.5px] font-semibold text-[#6B6B73] mb-1">Kontak Supplier</label>
             <input data-testid="supplier-contact-input" type="text" value={formData.supplier_contact}
               onChange={(e) => setFormData({ ...formData, supplier_contact: e.target.value })}
               className="field" placeholder="081234567890" />

@@ -27,6 +27,9 @@ import SalesReturns from "./features/sales/SalesReturns";
 import SpecialOrders from "./features/sales/SpecialOrders";
 import ApprovalInbox from "./features/approvals/ApprovalInbox";
 import ApprovalRulesSettings from "./features/settings/ApprovalRulesSettings";
+import SuppliersView from "./features/purchasing/SuppliersView";
+import PurchaseApprovalView from "./features/purchasing/PurchaseApprovalView";
+import CashManagementView from "./features/purchasing/CashManagementView";
 import {
   Archive,
   Boxes,
@@ -220,6 +223,9 @@ function App() {
             {activeView === "approval-inbox" && <ApprovalInbox currentUser={user} />}
             {activeView === "approval-rules" && <ApprovalRulesSettings currentUser={user} />}
             {activeView === "purchasing" && <PurchaseOrderManagement user={user} onApprovePO={approvePurchaseOrder} />}
+            {activeView === "suppliers" && <SuppliersView currentUser={user} selectedEntity={selectedEntity} />}
+            {activeView === "purchase-approval" && <PurchaseApprovalView currentUser={user} selectedEntity={selectedEntity} />}
+            {activeView === "cash-management" && <CashManagementView currentUser={user} selectedEntity={selectedEntity} />}
             {activeView === "operations" && <OperationsView data={data} movements={movements} tasks={tasks} entities={entities} selectedEntity={selectedEntity} onGenerateLabel={generateLabel} onCreateInboundTask={createInboundTask} onCreateOutboundTasks={createOutboundTasks} onScanTask={scanTask} onAdvanceTask={advanceTask} onShowDetail={setActiveDetail} token={token} user={user} defaultTab={wmsInitialTab} />}
             {isComingSoon && <ComingSoon title={pageMeta.title} kicker={pageMeta.kicker} onBack={() => handleNavSelect(defaultNavIdForRole(user?.role), defaultViewForRole(user?.role))} />}
             {activeView === "escalations" && <EscalationManagement user={user} />}

@@ -37,6 +37,11 @@ DEFAULT_GLOBAL_SETTINGS: Dict[str, Any] = {
         "min_cut_qty": 0.5,
         "intercompany_transfer_required": True,  # KN_15 D-? — jual stok entitas lain wajib transfer
     },
+    # Fase 3 — Purchasing (Procurement)
+    "purchasing": {
+        "receive_tolerance_percent": 2.0,   # toleransi qty terima vs PO (benang ±2%)
+        "require_supplier_master": False,    # True = PO wajib pilih supplier master
+    },
     # Sub-fase 1.7 — Allocation Policy (KN_15 §6.0) — CONFIGURABLE + CLARITY
     "allocation": {
         "mode": "auto",                                            # auto | assisted | manual

@@ -21,12 +21,13 @@ export default function PurchaseOrderManagement({ user, onApprovePO }) {
   const [pos, setPos] = useState([]);
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
 
   const emptyForm = {
-    supplier_name: "", supplier_contact: "", warehouse_id: "",
+    supplier_id: "", supplier_name: "", supplier_contact: "", warehouse_id: "",
     items: [], expected_delivery_date: "", notes: "",
     created_by: user?.name || "Admin",
   };
@@ -49,12 +50,14 @@ export default function PurchaseOrderManagement({ user, onApprovePO }) {
 
   const fetchMasterData = async () => {
     try {
-      const [pRes, wRes] = await Promise.all([
+      const [pRes, wRes, sRes] = await Promise.all([
         axios.get("/api/products"),
         axios.get("/api/warehouses"),
+        axios.get("/api/suppliers").catch(() => ({ data: [] })),
       ]);
       setProducts(pRes.data);
       setWarehouses(wRes.data);
+      setSuppliers(Array.isArray(sRes.data) ? sRes.data : []);
     } catch (e) {
       console.error("Error fetching master data:", e);
     }
@@ -156,7 +159,7 @@ export default function PurchaseOrderManagement({ user, onApprovePO }) {
         <POCreateForm
           formData={formData} setFormData={setFormData}
           newItem={newItem} setNewItem={setNewItem}
-          products={products} warehouses={warehouses}
+          products={products} warehouses={warehouses} suppliers={suppliers}
           onSubmit={handleCreatePO} onCancel={handleCloseForm}
           onAddItem={handleAddItem} onRemoveItem={handleRemoveItem}
         />

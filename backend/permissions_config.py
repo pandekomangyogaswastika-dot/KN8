@@ -20,6 +20,8 @@ DEFAULT_PERMISSIONS = {
         "sales_return": ["view", "create", "update", "approve", "reject"],
         "approval": ["view", "approve"],
         "settings": ["view", "manage"],
+        "supplier": ["view", "create", "update", "delete"],
+        "cash": ["view", "create", "delete"],
     },
     "sales": {
         "product": ["view"],
@@ -53,6 +55,8 @@ DEFAULT_PERMISSIONS = {
         "sales_return": ["view", "create", "update", "approve", "reject"],
         "approval": ["view", "approve"],
         "settings": ["view"],
+        "supplier": ["view", "create", "update", "delete"],
+        "cash": ["view", "create", "delete"],
     },
     "warehouse": {
         "product": ["view"],
