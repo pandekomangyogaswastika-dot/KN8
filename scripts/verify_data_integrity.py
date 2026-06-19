@@ -80,6 +80,8 @@ CONCEPTS = [
     # Fase 3 — Procurement (Supplier Master + Pengelolaan Kas)
     Concept("suppliers", "suppliers", True, ["vendor", "vendors", "pemasok"]),
     Concept("cash_transactions", "cash_transactions", True, ["kas", "petty_cash"]),
+    # Depth #1 — Retur Beli (Purchase Return / Nota Debit)
+    Concept("purchase_returns", "purchase_returns", True, ["retur_beli", "debit_notes", "po_returns"]),
     Concept("wms_tasks", "wms_tasks", True, ["inbound_tasks", "outbound_tasks", "receiving_tasks"]),
     Concept("document_templates", "document_templates", True, ["templates"]),
     Concept("permission_settings", "permission_settings", True, []),

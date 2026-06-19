@@ -560,6 +560,12 @@ Key Fields:
 ⚠️ PO tanpa approval → langsung buat wms_tasks (inbound). PO butuh approval → wms_tasks
    dibuat HANYA setelah /purchase-orders/{id}/approve (role_satisfies dari approval_rules).
    /purchase-orders/{id}/reject → status 'rejected' (tanpa task).
+⚠️ Depth 1A — status lifecycle: waiting_approval → pending → receiving → partial → completed
+   (dihitung dari Σ received_qty vs quantity ± toleransi via recompute_po_status).
+   /purchase-orders/{id}/close → 'closed_short' (tutup kurang; batalkan task terbuka).
+⚠️ Depth 1C — keuangan/AP: field amount_paid, returned_amount, outstanding, payment_status
+   (unpaid|partial|paid), payments[]. /purchase-orders/{id}/pay → cash_transaction(out,
+   ref_type=purchase_order) + update AP. /purchase-orders/payables/summary → AP + aging.
 ⚠️ JANGAN BUAT: po, pembelian, supplier_orders, procurement
 ```
 
@@ -596,6 +602,26 @@ Endpoints:   GET /cash-transactions · GET /cash-transactions/summary ·
 Invarian:    saldo = Σ(amount where direction=in) − Σ(amount where direction=out)
              untuk status≠void.
 ⚠️ JANGAN BUAT: kas, petty_cash, cash
+```
+
+### purchase_returns
+```
+Collection:  purchase_returns  Prefix: pret_
+Router:      routers/purchase_returns.py · Service: services/purchase_return_service.py
+Schema:      schemas.py → PurchaseReturnCreate, PurchaseReturnItem, PurchaseReturnDecision
+Component:   PurchaseReturns.jsx (Pembelian → Retur Beli)
+Status:      draft → pending_approval → approved | rejected
+Key Fields:
+  id, number (PRET-NNNNN), supplier_id, supplier_name, po_id, po_number,
+  warehouse_id, warehouse_name, entity_id, items[{product_id, sku, product_name,
+  quantity, unit, price, subtotal, reason, condition}], total_amount, reason,
+  status, debit_note_number (DN-NNNNN saat approved), stock_adjusted,
+  created_by, approved_by, rejected_by, ...
+Endpoints:   GET/POST /purchase-returns · GET /purchase-returns/{id} ·
+             POST /{id}/submit · /{id}/approve · /{id}/reject
+Efek approve: KURANGI inventory_rolls available (FIFO, status→returned_supplier),
+             movement return_out, terbitkan Nota Debit, KURANGI AP (PO.returned_amount).
+⚠️ JANGAN BUAT: retur_beli, debit_notes, po_returns, vendor_returns
 ```
 
 ### document_templates

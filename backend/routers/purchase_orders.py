@@ -5,10 +5,85 @@ from pymongo import ReturnDocument
 from db import db
 from dependencies import require_permission, audit, current_user
 from core_utils import new_id, now_iso, safe_doc, DEFAULT_ENTITY_ID
-from schemas import PurchaseOrderCreate, POReceiveItem
-from services.config_service import evaluate_approval, role_satisfies
+from schemas import PurchaseOrderCreate, POReceiveItem, POPaymentCreate, POCloseRequest
+from services.config_service import evaluate_approval, role_satisfies, get_effective_settings
 
 router = APIRouter(prefix="/api")
+
+# Status PO yang dianggap "barang sudah/akan diterima" → menimbulkan hutang (AP)
+AP_LIABILITY_STATUSES = {"pending", "receiving", "partial", "completed", "closed_short"}
+TERMINAL_PO_STATUSES = {"cancelled", "rejected", "closed_short", "completed"}
+
+
+def _po_financials(po: Dict[str, Any]) -> Dict[str, Any]:
+    """Hitung nilai keuangan PO: diterima, retur, dibayar, outstanding (AP)."""
+    ordered_value = 0.0
+    received_value = 0.0
+    for it in po.get("items", []):
+        price = float(it.get("price", 0) or 0)
+        ordered_value += float(it.get("quantity", 0) or 0) * price
+        received_value += float(it.get("received_qty", 0) or 0) * price
+    total = float(po.get("total_amount", 0) or 0)
+    if total <= 0.0:  # fallback PO lama tanpa total_amount tersimpan
+        total = ordered_value
+    amount_paid = float(po.get("amount_paid", 0) or 0)
+    returned_amount = float(po.get("returned_amount", 0) or 0)
+    billable = max(total - returned_amount, 0.0)
+    outstanding = round(max(billable - amount_paid, 0.0), 2)
+    if amount_paid <= 0.01:
+        pay_status = "unpaid"
+    elif outstanding <= 0.01:
+        pay_status = "paid"
+    else:
+        pay_status = "partial"
+    return {
+        "total_amount": round(total, 2),
+        "received_value": round(received_value, 2),
+        "returned_amount": round(returned_amount, 2),
+        "amount_paid": round(amount_paid, 2),
+        "outstanding": outstanding,
+        "payment_status": pay_status,
+    }
+
+
+async def recompute_po_status(po_id: str) -> None:
+    """Depth 1A — hitung status PO dari received_qty tiap item.
+    Tidak menimpa status terminal (cancelled/rejected/closed_short/completed)."""
+    po = await db.purchase_orders.find_one({"id": po_id}, {"_id": 0})
+    if not po or po.get("status") in TERMINAL_PO_STATUSES:
+        return
+    items = po.get("items", [])
+    if not items:
+        return
+    settings = await get_effective_settings(po.get("entity_id"))
+    tol = float((settings.get("purchasing", {}) or {}).get("receive_tolerance_percent", 2.0) or 0)
+    total_received = sum(float(it.get("received_qty", 0) or 0) for it in items)
+    # Item dianggap lengkap bila received >= ordered*(1 - toleransi)
+    all_complete = all(
+        float(it.get("received_qty", 0) or 0) + 1e-6 >= float(it.get("quantity", 0) or 0) * (1 - tol / 100.0)
+        for it in items
+    )
+    if all_complete and total_received > 0:
+        new_status = "completed"
+    elif total_received > 0:
+        new_status = "partial"
+    else:
+        new_status = po.get("status", "pending")
+    if new_status != po.get("status"):
+        await db.purchase_orders.update_one(
+            {"id": po_id}, {"$set": {"status": new_status, "updated_at": now_iso()}})
+
+
+async def recompute_po_payment_status(po_id: str) -> None:
+    """Depth 1C — sinkronkan payment_status & outstanding PO."""
+    po = await db.purchase_orders.find_one({"id": po_id}, {"_id": 0})
+    if not po:
+        return
+    fin = _po_financials(po)
+    await db.purchase_orders.update_one(
+        {"id": po_id},
+        {"$set": {"payment_status": fin["payment_status"], "outstanding": fin["outstanding"],
+                  "updated_at": now_iso()}})
 
 
 async def _create_inbound_tasks_for_po(po: Dict[str, Any]) -> None:
@@ -150,6 +225,12 @@ async def create_purchase_order(payload: PurchaseOrderCreate, request: Request) 
         "required_approval_role": appr["required_role"],
         "approval_status": "pending" if needs_approval else "not_required",
         "approval_amount": total_amount,
+        # Depth 1C — pelacakan pembayaran / hutang (AP)
+        "amount_paid": 0.0,
+        "returned_amount": 0.0,
+        "outstanding": round(total_amount, 2),
+        "payment_status": "unpaid",
+        "payments": [],
         "created_by": payload.created_by,
         "created_at": now_iso(),
         "updated_at": now_iso()
@@ -246,8 +327,144 @@ async def get_purchase_order(po_id: str, request: Request) -> Dict[str, Any]:
     # Get related inbound tasks
     tasks = await db.wms_tasks.find({"po_id": po_id}, {"_id": 0}).to_list(100)
     po["inbound_tasks"] = tasks
-    
+    # Depth 1C — ringkasan keuangan + retur terkait
+    po["financials"] = _po_financials(po)
+    rets = await db.purchase_returns.find({"po_id": po_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    po["returns"] = rets
+
     return po
+
+
+@router.post("/purchase-orders/{po_id}/pay")
+async def pay_purchase_order(po_id: str, payload: POPaymentCreate, request: Request) -> Dict[str, Any]:
+    """Depth 1C — bayar PO (kas keluar) → catat cash_transaction + update AP."""
+    actor = await require_permission(request, "purchase_order", "update")
+    po = await db.purchase_orders.find_one({"id": po_id}, {"_id": 0})
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase Order tidak ditemukan")
+    if po.get("status") in ("cancelled", "rejected", "waiting_approval"):
+        raise HTTPException(status_code=400, detail=f"PO status '{po.get('status')}' tidak bisa dibayar")
+    amount = round(float(payload.amount or 0), 2)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Nominal pembayaran harus > 0")
+    fin = _po_financials(po)
+    if amount > fin["outstanding"] + 0.01:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Pembayaran ({amount}) melebihi sisa hutang ({fin['outstanding']}).")
+
+    # Catat kas keluar
+    if payload.cash_type == "kas_besar":
+        cash_entity = "all"
+    else:
+        cash_entity = payload.entity_id or po.get("entity_id") or DEFAULT_ENTITY_ID
+    cash_count = await db.cash_transactions.count_documents({})
+    cash_doc = {
+        "id": new_id("cash"), "number": f"CASH-{cash_count + 1:05d}",
+        "cash_type": payload.cash_type, "direction": "out", "amount": amount,
+        "category": "pembelian",
+        "description": f"Pembayaran {po.get('po_number')} — {po.get('supplier_name','')} ({payload.method})",
+        "entity_id": cash_entity, "ref_type": "purchase_order", "ref_id": po_id,
+        "txn_date": payload.paid_at or now_iso(), "status": "posted",
+        "created_by": actor["name"], "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    await db.cash_transactions.insert_one(cash_doc)
+
+    payment = {
+        "id": new_id("pay"), "amount": amount, "method": payload.method,
+        "cash_txn_id": cash_doc["id"], "cash_txn_number": cash_doc["number"],
+        "cash_type": payload.cash_type, "notes": payload.notes,
+        "paid_by": actor["name"], "paid_at": payload.paid_at or now_iso(),
+    }
+    await db.purchase_orders.update_one(
+        {"id": po_id},
+        {"$inc": {"amount_paid": amount}, "$push": {"payments": payment},
+         "$set": {"updated_at": now_iso()}})
+    await recompute_po_payment_status(po_id)
+    await audit(actor["name"], "po_payment", "purchase_order", po_id,
+                {"po_number": po.get("po_number"), "amount": amount, "cash": cash_doc["number"]})
+    updated = await db.purchase_orders.find_one({"id": po_id}, {"_id": 0})
+    updated["financials"] = _po_financials(updated)
+    return safe_doc(updated)
+
+
+@router.post("/purchase-orders/{po_id}/close")
+async def close_purchase_order_short(po_id: str, payload: POCloseRequest, request: Request) -> Dict[str, Any]:
+    """Depth 1A — tutup PO yang kurang terima (short-close). Sisa item tak diharapkan lagi."""
+    actor = await require_permission(request, "purchase_order", "update")
+    po = await db.purchase_orders.find_one({"id": po_id}, {"_id": 0})
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase Order tidak ditemukan")
+    if po.get("status") not in ("receiving", "partial", "pending"):
+        raise HTTPException(status_code=400, detail=f"PO status '{po.get('status')}' tidak bisa ditutup-kurang")
+    updated = await db.purchase_orders.find_one_and_update(
+        {"id": po_id},
+        {"$set": {"status": "closed_short", "close_reason": payload.reason,
+                  "closed_by": actor["name"], "closed_at": now_iso(), "updated_at": now_iso()}},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER)
+    # Batalkan inbound task yang belum selesai
+    await db.wms_tasks.update_many(
+        {"po_id": po_id, "status": {"$nin": ["completed", "cancelled"]}},
+        {"$set": {"status": "cancelled", "updated_at": now_iso(),
+                  "cancel_reason": "PO ditutup-kurang"}})
+    await audit(actor["name"], "po_closed_short", "purchase_order", po_id,
+                {"po_number": po.get("po_number"), "reason": payload.reason})
+    return safe_doc(updated)
+
+
+@router.get("/purchase-orders/payables/summary")
+async def payables_summary(request: Request, entity_id: str = None) -> Dict[str, Any]:
+    """Depth 1C — ringkasan hutang (AP) ke supplier + aging per PO."""
+    await require_permission(request, "purchase_order", "view")
+    from datetime import datetime, timezone
+    q: Dict[str, Any] = {"status": {"$in": list(AP_LIABILITY_STATUSES)}}
+    if entity_id and entity_id != "all":
+        q["entity_id"] = entity_id
+    pos = await db.purchase_orders.find(q, {"_id": 0}).to_list(1000)
+    now = datetime.now(timezone.utc)
+    by_supplier: Dict[str, Dict[str, Any]] = {}
+    aging = {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, ">90": 0.0}
+    total_outstanding = 0.0
+    rows = []
+    for po in pos:
+        fin = _po_financials(po)
+        out = fin["outstanding"]
+        if out <= 0.01:
+            continue
+        total_outstanding += out
+        # aging dari expected_delivery_date / created_at
+        ref_date = po.get("expected_delivery_date") or po.get("created_at") or ""
+        days = 0
+        try:
+            d = datetime.fromisoformat(ref_date.replace("Z", "+00:00"))
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=timezone.utc)
+            days = (now - d).days
+        except Exception:  # noqa: BLE001
+            days = 0
+        bucket = "0-30" if days <= 30 else "31-60" if days <= 60 else "61-90" if days <= 90 else ">90"
+        aging[bucket] += out
+        sid = po.get("supplier_id") or po.get("supplier_name") or "—"
+        sup = by_supplier.setdefault(sid, {
+            "supplier_id": po.get("supplier_id", ""), "supplier_name": po.get("supplier_name", "—"),
+            "outstanding": 0.0, "po_count": 0})
+        sup["outstanding"] = round(sup["outstanding"] + out, 2)
+        sup["po_count"] += 1
+        rows.append({
+            "po_id": po["id"], "po_number": po.get("po_number"), "supplier_name": po.get("supplier_name"),
+            "supplier_id": po.get("supplier_id", ""), "status": po.get("status"),
+            "total_amount": fin["total_amount"], "amount_paid": fin["amount_paid"],
+            "returned_amount": fin["returned_amount"], "outstanding": out,
+            "payment_status": fin["payment_status"], "days_outstanding": days, "aging_bucket": bucket,
+            "expected_delivery_date": po.get("expected_delivery_date", ""),
+        })
+    rows.sort(key=lambda r: (-r["days_outstanding"], -r["outstanding"]))
+    return {
+        "total_outstanding": round(total_outstanding, 2),
+        "aging": {k: round(v, 2) for k, v in aging.items()},
+        "by_supplier": sorted(by_supplier.values(), key=lambda s: -s["outstanding"]),
+        "purchase_orders": rows,
+    }
 
 
 @router.post("/purchase-orders/{po_id}/cancel")

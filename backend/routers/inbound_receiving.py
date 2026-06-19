@@ -350,11 +350,14 @@ async def complete_inbound_receiving(task_id: str, request: Request) -> Dict[str
                 {
                     "$inc": {"items.$.received_qty": final_qty},
                     "$set": {
-                        "status": "receiving",  # Or "completed" if all items done
+                        "status": "receiving",
                         "updated_at": now_iso()
                     }
                 }
             )
+            # Depth 1A — hitung ulang status PO (partial/completed) dari received_qty
+            from routers.purchase_orders import recompute_po_status
+            await recompute_po_status(task["po_id"])
 
         # Rebuild proyeksi balance segmen (jaga invarian balance == Σ rolls)
         await rebuild_balance(task["product_id"], task["warehouse_id"], owner_entity_id)

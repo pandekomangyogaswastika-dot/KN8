@@ -132,6 +132,29 @@ export default function PurchaseOrderManagement({ user, onApprovePO }) {
     if (result) { await fetchPOs(); await handleViewDetail(poId); }
   };
 
+  const handlePayPO = async (poId, payload) => {
+    try {
+      await axios.post(`/api/purchase-orders/${poId}/pay`, payload);
+      await fetchPOs();
+      await handleViewDetail(poId);
+      return true;
+    } catch (e) {
+      alert(e.response?.data?.detail || "Gagal mencatat pembayaran");
+      return false;
+    }
+  };
+
+  const handleCloseShort = async (poId, reason) => {
+    if (!window.confirm("Tutup PO ini (kurang terima)? Task inbound terbuka akan dibatalkan.")) return;
+    try {
+      await axios.post(`/api/purchase-orders/${poId}/close`, { reason });
+      await fetchPOs();
+      await handleViewDetail(poId);
+    } catch (e) {
+      alert(e.response?.data?.detail || "Gagal menutup PO");
+    }
+  };
+
   const handleCloseForm = () => {
     setShowCreateForm(false);
     setFormData(emptyForm);
@@ -204,9 +227,12 @@ export default function PurchaseOrderManagement({ user, onApprovePO }) {
         {/* PO Detail Panel */}
         <PODetailPanel
           po={selectedPO}
+          currentUser={user}
           onClose={() => setSelectedPO(null)}
           onApprove={handleApprovePO}
           onCancel={handleCancelPO}
+          onPay={handlePayPO}
+          onCloseShort={handleCloseShort}
         />
       </div>
     </div>

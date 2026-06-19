@@ -23,6 +23,7 @@ DEFAULT_PERMISSIONS = {
         "supplier": ["view", "create", "update", "delete"],
         "cash": ["view", "create", "delete"],
         "purchase_order": ["view", "create", "update", "approve", "reject"],
+        "purchase_return": ["view", "create", "update", "approve", "reject"],
     },
     "sales": {
         "product": ["view"],
@@ -60,6 +61,7 @@ DEFAULT_PERMISSIONS = {
         "supplier": ["view", "create", "update", "delete"],
         "cash": ["view", "create", "delete"],
         "purchase_order": ["view", "create", "update", "approve", "reject"],
+        "purchase_return": ["view", "create", "update", "approve", "reject"],
     },
     "warehouse": {
         "product": ["view"],
@@ -73,5 +75,6 @@ DEFAULT_PERMISSIONS = {
         "label": ["view", "generate"],
         "transfer": ["view", "create", "update"],
         "purchase_order": ["view"],
+        "purchase_return": ["view", "create"],
     },
 }

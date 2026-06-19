@@ -1,12 +1,19 @@
-import { FileText, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { FileText, CheckCircle, XCircle, AlertCircle, Wallet, RotateCcw, Ban } from "lucide-react";
 import { formatCurrency } from "../../../utils/formatters";
-import { getStatusBadge } from "./poUtils";
+import { getStatusBadge, getPaymentBadge } from "./poUtils";
+import KNSelect from "../../../components/KNSelect";
 
 /**
- * PODetailPanel — panel kanan detail PO yang dipilih.
- * Props: po, onClose, onApprove, onCancel
+ * PODetailPanel — panel kanan detail PO (Depth #1: progress, AP/pembayaran, tutup-kurang, retur).
+ * Props: po, currentUser, onClose, onApprove, onCancel, onPay, onCloseShort
  */
-export default function PODetailPanel({ po, onClose, onApprove, onCancel }) {
+export default function PODetailPanel({ po, currentUser, onClose, onApprove, onCancel, onPay, onCloseShort }) {
+  const [showPay, setShowPay] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [payType, setPayType] = useState("kas_besar");
+  const [payMethod, setPayMethod] = useState("transfer");
+
   if (!po) {
     return (
       <div className="section-card flex items-center justify-center min-h-[200px] border-dashed">
@@ -18,12 +25,23 @@ export default function PODetailPanel({ po, onClose, onApprove, onCancel }) {
     );
   }
 
+  const canManage = ["admin", "manager"].includes(currentUser?.role);
+  const fin = po.financials || {};
+  const goodsReceived = ["receiving", "partial", "completed", "closed_short"].includes(po.status);
+
+  async function submitPay() {
+    const amt = Number(payAmount);
+    if (!amt || amt <= 0) { alert("Nominal harus > 0"); return; }
+    const ok = await onPay(po.id, { amount: amt, cash_type: payType, method: payMethod });
+    if (ok) { setShowPay(false); setPayAmount(""); }
+  }
+
   return (
-    <div className="section-card self-start">
+    <div className="section-card self-start" data-testid="po-detail-panel">
       <div className="section-head">
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase text-[#0058CC]">{po.po_number}</p>
-          <div className="mt-0.5">{getStatusBadge(po.status)}</div>
+          <div className="mt-0.5 flex items-center gap-1">{getStatusBadge(po.status)}{goodsReceived && getPaymentBadge(fin.payment_status)}</div>
         </div>
         <button className="icon-button" onClick={onClose}><XCircle size={14} /></button>
       </div>
@@ -43,78 +61,135 @@ export default function PODetailPanel({ po, onClose, onApprove, onCancel }) {
           </div>
         </div>
 
-        {/* Items */}
+        {/* Items with receive progress (Depth 1A) */}
         <div className="rounded-md border border-[#EFF0F2] overflow-hidden">
           <div className="px-2.5 py-1.5 bg-[#FAFBFC] text-[10px] font-bold uppercase text-[#6B6B73] border-b border-[#EFF0F2]">
-            Items ({po.items?.length || 0})
+            Items & Progress Terima ({po.items?.length || 0})
           </div>
-          {po.items?.map((item, i) => (
-            <div key={i} className="px-2.5 py-1.5 border-b border-[#EFF0F2] last:border-0 text-[11px]">
-              <div className="flex justify-between">
-                <p className="font-semibold truncate">{item.sku}</p>
-                <p className="font-bold tabular-nums">{formatCurrency(item.subtotal || 0)}</p>
+          {po.items?.map((item, i) => {
+            const ordered = Number(item.quantity || 0);
+            const rcv = Number(item.received_qty || 0);
+            const pct = ordered > 0 ? Math.min(100, Math.round((rcv / ordered) * 100)) : 0;
+            const done = pct >= 100;
+            return (
+              <div key={i} data-testid={`po-item-${i}`} className="px-2.5 py-1.5 border-b border-[#EFF0F2] last:border-0 text-[11px]">
+                <div className="flex justify-between items-center">
+                  <p className="font-semibold truncate">{item.sku}</p>
+                  <p className="font-bold tabular-nums">{formatCurrency(item.subtotal || ordered * (item.price || 0))}</p>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 rounded-full bg-[#EFF0F2] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: done ? "#16A34A" : "#0058CC" }} />
+                  </div>
+                  <span className="text-[10px] tabular-nums text-[#6B6B73] whitespace-nowrap">{rcv}/{ordered} {item.unit}</span>
+                </div>
               </div>
-              <p className="text-[10.5px] text-[#6B6B73]">
-                Expected: {item.quantity} {item.unit} · Rcv: {item.received_qty || 0}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Inbound Tasks */}
-        {po.inbound_tasks?.length > 0 && (
-          <div className="rounded-md border border-[#EFF0F2] overflow-hidden">
-            <div className="px-2.5 py-1.5 bg-[#FAFBFC] text-[10px] font-bold uppercase text-[#6B6B73] border-b border-[#EFF0F2]">
-              Inbound Tasks
+        {/* Financial summary (Depth 1C) */}
+        {goodsReceived && (
+          <div data-testid="po-financials" className="rounded-md border border-[#EFF0F2] overflow-hidden text-[11.5px]">
+            <div className="px-2.5 py-1.5 bg-[#FAFBFC] text-[10px] font-bold uppercase text-[#6B6B73] border-b border-[#EFF0F2]">Keuangan / Hutang (AP)</div>
+            <div className="p-2.5 space-y-1">
+              <Row label="Total PO" value={formatCurrency(fin.total_amount)} />
+              {fin.returned_amount > 0 && <Row label="Retur (Nota Debit)" value={`- ${formatCurrency(fin.returned_amount)}`} tone="text-amber-700" />}
+              <Row label="Sudah Dibayar" value={formatCurrency(fin.amount_paid)} tone="text-green-700" />
+              <div className="flex justify-between border-t border-[#EFF0F2] pt-1 mt-1">
+                <span className="font-bold">Sisa Hutang</span>
+                <span data-testid="po-outstanding" className="font-bold tabular-nums text-red-600">{formatCurrency(fin.outstanding)}</span>
+              </div>
             </div>
-            {po.inbound_tasks.map((task) => (
-              <div key={task.id} className="flex items-center justify-between px-2.5 py-1.5 border-b border-[#EFF0F2] last:border-0">
-                <div>
-                  <p className="text-[11.5px] font-semibold">{task.sku}</p>
-                  <p className="text-[10.5px] text-[#6B6B73]">Rcv: {task.received_qty || 0}/{task.expected_qty}</p>
-                </div>
-                {getStatusBadge(task.status)}
+          </div>
+        )}
+
+        {/* Returns linked (Depth 1B) */}
+        {po.returns?.length > 0 && (
+          <div className="rounded-md border border-[#EFF0F2] overflow-hidden">
+            <div className="px-2.5 py-1.5 bg-[#FAFBFC] text-[10px] font-bold uppercase text-[#6B6B73] border-b border-[#EFF0F2]">Retur Beli</div>
+            {po.returns.map((r) => (
+              <div key={r.id} className="flex items-center justify-between px-2.5 py-1.5 border-b border-[#EFF0F2] last:border-0 text-[11px]">
+                <div><p className="font-semibold">{r.number}</p><p className="text-[10px] text-[#6B6B73]">{r.debit_note_number || r.status}</p></div>
+                <span className="font-bold tabular-nums text-amber-700">{formatCurrency(r.total_amount)}</span>
               </div>
             ))}
           </div>
         )}
 
-        {/* Total + approval badge */}
-        <div className="flex items-center justify-between rounded-md border border-[#EFF0F2] bg-[#FAFBFC] p-2 text-[11.5px]">
-          <span className="text-[10px] font-bold uppercase text-[#6B6B73]">Total PO</span>
-          <span className="text-[13px] font-bold text-[#007AFF] tabular-nums">{formatCurrency(po.total_amount)}</span>
-        </div>
         {po.status === "waiting_approval" && po.required_approval_role && (
-          <div data-testid="po-approval-badge"
-            className="flex items-center gap-2 rounded-md border border-[#FFE2B8] bg-[#FFF7EC] px-2.5 py-1.5 text-[11px] text-[#9A5B00]">
+          <div data-testid="po-approval-badge" className="flex items-center gap-2 rounded-md border border-[#FFE2B8] bg-[#FFF7EC] px-2.5 py-1.5 text-[11px] text-[#9A5B00]">
             <AlertCircle size={13} />
             <span>Butuh approval role <b className="uppercase">{po.required_approval_role}</b> sebelum inbound task dibuat.</span>
+          </div>
+        )}
+        {po.status === "closed_short" && (
+          <div className="rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[11px] text-stone-600">
+            PO ditutup-kurang. Alasan: {po.close_reason || "—"}
+          </div>
+        )}
+
+        {/* Payment form */}
+        {showPay && (
+          <div data-testid="po-pay-form" className="rounded-md border border-[#D6E4FF] bg-[#F5F9FF] p-2.5 space-y-2">
+            <p className="text-[11px] font-bold text-[#0058CC]">Catat Pembayaran</p>
+            <div>
+              <label className="block text-[10px] font-semibold text-[#6B6B73] mb-0.5">Nominal (sisa {formatCurrency(fin.outstanding)})</label>
+              <input data-testid="po-pay-amount" type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="field" placeholder="0" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <KNSelect data-testid="po-pay-cashtype" value={payType} onValueChange={setPayType} className="field"
+                options={[{ value: "kas_besar", label: "Kas Besar" }, { value: "kas_kecil", label: "Kas Kecil" }]} />
+              <KNSelect data-testid="po-pay-method" value={payMethod} onValueChange={setPayMethod} className="field"
+                options={[{ value: "transfer", label: "Transfer" }, { value: "tunai", label: "Tunai" }, { value: "giro", label: "Giro" }]} />
+            </div>
+            <div className="flex gap-2">
+              <button data-testid="po-pay-submit" onClick={submitPay} className="flex-1 primary-button justify-center">Bayar</button>
+              <button onClick={() => setShowPay(false)} className="secondary-button">Batal</button>
+            </div>
           </div>
         )}
 
         {/* Actions */}
         <div className="flex flex-col gap-1.5">
-          {po.status === "waiting_approval" && (
-            <button data-testid="approve-po-button" onClick={() => onApprove(po.id)}
-              className="primary-button justify-center">
+          {po.status === "waiting_approval" && canManage && (
+            <button data-testid="approve-po-button" onClick={() => onApprove(po.id)} className="primary-button justify-center">
               <CheckCircle size={13} /> Approve PO
+            </button>
+          )}
+          {goodsReceived && fin.outstanding > 0 && canManage && (
+            <button data-testid="pay-po-button" onClick={() => { setShowPay(!showPay); setPayAmount(String(fin.outstanding || "")); }} className="primary-button justify-center">
+              <Wallet size={13} /> Bayar PO
+            </button>
+          )}
+          {["receiving", "partial", "pending"].includes(po.status) && canManage && (
+            <button data-testid="close-po-button" onClick={() => onCloseShort(po.id, window.prompt("Alasan tutup-kurang?", "") || "")} className="secondary-button justify-center">
+              <Ban size={13} /> Tutup PO (Kurang)
             </button>
           )}
           {po.status === "completed" && (
             <button data-testid="view-receiving-goods-doc"
               onClick={() => window.open(`/api/inbound/po/${po.id}/receiving-goods-document`, "_blank")}
-              className="primary-button justify-center">
-              <FileText size={13} /> Receiving Goods Document
+              className="secondary-button justify-center">
+              <FileText size={13} /> Dokumen Goods Receipt
             </button>
           )}
-          {["waiting_approval", "pending", "receiving"].includes(po.status) && (
-            <button data-testid="cancel-po-button" onClick={() => onCancel(po.id)}
-              className="danger-button justify-center">
-              Cancel PO
+          {["waiting_approval", "pending"].includes(po.status) && canManage && (
+            <button data-testid="cancel-po-button" onClick={() => onCancel(po.id)} className="danger-button justify-center">
+              Batalkan PO
             </button>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Row({ label, value, tone }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-[#6B6B73]">{label}</span>
+      <span className={`font-semibold tabular-nums ${tone || ""}`}>{value}</span>
     </div>
   );
 }

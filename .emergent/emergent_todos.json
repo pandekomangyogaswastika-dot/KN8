@@ -1,34 +1,42 @@
 [
   {
-    "content": "Fase 3.1: Master Supplier — backend + frontend SuppliersView + nav",
+    "content": "Riset pola: sales_returns, roll reduction, PODetailPanel, cash linkage",
     "status": "completed"
   },
   {
-    "content": "Fase 3.1b: PO ↔ supplier FK + PO form supplier dropdown",
+    "content": "Depth 1A: PO state machine (recompute_po_status partial/completed) + close-short endpoint",
     "status": "completed"
   },
   {
-    "content": "Fase 3.2: Purchase Approval — reject endpoint + frontend + seed demo",
+    "content": "Depth 1A FE: PODetailPanel progress per item + status + Tutup PO (kurang)",
     "status": "completed"
   },
   {
-    "content": "Fase 3.3: Toleransi kedatangan ±2% — config + inbound tolerance",
+    "content": "Depth 1B BE: Retur Beli (purchase_returns) router+service + kurangi roll + nota debit + seed",
     "status": "completed"
   },
   {
-    "content": "Fase 3.4: Pengelolaan Kas — backend + frontend CashManagementView + nav",
+    "content": "Depth 1B FE: PurchaseReturns.jsx + nav (Pembelian → Retur Beli)",
     "status": "completed"
   },
   {
-    "content": "Gates all green (103 PASS) + plan.md/ENTITY_REGISTRY updated",
+    "content": "Depth 1C BE: Pelunasan PO via Kas (/pay) + AP outstanding/aging (/payables/summary)",
     "status": "completed"
   },
   {
-    "content": "Fix: 500 approve bug (warehouse_name) + manager PO permission (dedicated purchase_order perm)",
+    "content": "Depth 1C FE: PODetailPanel Bayar + PayablesView (Hutang Supplier) + nav",
     "status": "completed"
   },
   {
-    "content": "End-to-end testing via testing_agent_v3 (backend 100% 40/40, 0 bugs) + UI verified",
+    "content": "Gates (verify_contract, data_integrity, ENTITY_REGISTRY, seed) all green 107 PASS",
     "status": "completed"
+  },
+  {
+    "content": "Screenshot verify new pages + testing_agent_v3 end-to-end + fix issues",
+    "status": "in_progress"
+  },
+  {
+    "content": "Update plan.md with Depth #1 status",
+    "status": "pending"
   }
 ]

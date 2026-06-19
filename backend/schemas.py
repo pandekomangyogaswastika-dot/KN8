@@ -295,6 +295,48 @@ class CashTransactionCreate(BaseModel):
     created_by: str = "Admin"
 
 
+# ─── Depth #1: PO Payment + Retur Beli (Purchase Return / Nota Debit) ─────────
+
+class POPaymentCreate(BaseModel):
+    amount: float
+    cash_type: str = "kas_besar"      # kas_kecil | kas_besar (sumber dana)
+    entity_id: str = ""               # untuk kas_kecil
+    method: str = "transfer"          # transfer | tunai | giro
+    notes: str = ""
+    paid_at: str = ""                 # ISO; default sekarang
+    created_by: str = "Admin"
+
+
+class POCloseRequest(BaseModel):
+    reason: str = ""                  # alasan tutup kurang (short-close)
+    created_by: str = "Admin"
+
+
+class PurchaseReturnItem(BaseModel):
+    product_id: str
+    quantity: float
+    unit: str = "meter"
+    price: float = 0.0
+    reason: str = ""                  # cacat | salah_kirim | kelebihan | lain
+    condition: str = "damaged"        # damaged | ok
+
+
+class PurchaseReturnCreate(BaseModel):
+    supplier_id: str = ""
+    po_id: str = ""                   # opsional — retur bisa tanpa PO referensi
+    warehouse_id: str = ""
+    items: List[PurchaseReturnItem]
+    reason: str = ""
+    notes: str = ""
+    entity_id: str = ""
+    submit_now: bool = False
+    created_by: str = "Admin"
+
+
+class PurchaseReturnDecision(BaseModel):
+    notes: str = ""
+
+
 class POReceiveItem(BaseModel):
     product_id: str
     actual_qty: float

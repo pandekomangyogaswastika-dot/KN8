@@ -21,7 +21,7 @@ from routers import (
     purchase_orders, inbound_receiving, outbound_picking,
     entities, notifications, settings, price_approvals, pegging, tax_invoices,
     sales_returns, special_orders, approval_rules, approval_requests,
-    suppliers, cash
+    suppliers, cash, purchase_returns
 )
 
 
@@ -461,7 +461,7 @@ for module in [
     purchase_orders, inbound_receiving, outbound_picking,
     entities, notifications, settings, price_approvals, pegging, tax_invoices,
     sales_returns, special_orders, approval_rules, approval_requests,
-    suppliers, cash
+    suppliers, cash, purchase_returns
 ]:
     app.include_router(module.router)
 
