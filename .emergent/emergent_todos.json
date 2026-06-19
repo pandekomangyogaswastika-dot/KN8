@@ -1,22 +1,22 @@
 [
   {
-    "content": "Fase 3.1: Master Supplier — backend + frontend SuppliersView + nav (DONE)",
+    "content": "Fase 3.1: Master Supplier — backend + frontend SuppliersView + nav",
     "status": "completed"
   },
   {
-    "content": "Fase 3.1b: PO ↔ supplier FK + PO form supplier dropdown (DONE)",
+    "content": "Fase 3.1b: PO ↔ supplier FK + PO form supplier dropdown",
     "status": "completed"
   },
   {
-    "content": "Fase 3.2: Purchase Approval — backend reject + frontend + seed demo (DONE)",
+    "content": "Fase 3.2: Purchase Approval — reject endpoint + frontend + seed demo",
     "status": "completed"
   },
   {
-    "content": "Fase 3.3: Toleransi kedatangan ±2% — config + inbound tolerance (DONE)",
+    "content": "Fase 3.3: Toleransi kedatangan ±2% — config + inbound tolerance",
     "status": "completed"
   },
   {
-    "content": "Fase 3.4: Pengelolaan Kas — backend + frontend CashManagementView + nav (DONE)",
+    "content": "Fase 3.4: Pengelolaan Kas — backend + frontend CashManagementView + nav",
     "status": "completed"
   },
   {
@@ -24,7 +24,11 @@
     "status": "completed"
   },
   {
-    "content": "End-to-end testing via testing_agent_v3 + fix issues",
-    "status": "in_progress"
+    "content": "Fix: 500 approve bug (warehouse_name) + manager PO permission (dedicated purchase_order perm)",
+    "status": "completed"
+  },
+  {
+    "content": "End-to-end testing via testing_agent_v3 (backend 100% 40/40, 0 bugs) + UI verified",
+    "status": "completed"
   }
 ]
