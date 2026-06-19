@@ -14,6 +14,14 @@ router = APIRouter(prefix="/api")
 async def _create_inbound_tasks_for_po(po: Dict[str, Any]) -> None:
     """Buat inbound receiving task untuk tiap item PO (dipanggil saat PO siap
     diterima: langsung bila tak butuh approval, atau setelah di-approve)."""
+    # Resolve warehouse name/city defensively (PO lama/seed mungkin tak menyimpannya).
+    wh_name = po.get("warehouse_name", "")
+    wh_city = po.get("warehouse_city", "")
+    if not wh_name and po.get("warehouse_id"):
+        wh = await db.warehouses.find_one({"id": po["warehouse_id"]}, {"_id": 0, "name": 1, "city": 1})
+        if wh:
+            wh_name = wh.get("name", "")
+            wh_city = wh.get("city", "") or wh_city
     for item in po.get("items", []):
         stages = ["waiting_goods", "receiving", "qc_check", "put_away", "completed"]
         await db.wms_tasks.insert_one({
@@ -23,15 +31,16 @@ async def _create_inbound_tasks_for_po(po: Dict[str, Any]) -> None:
             "po_id": po["id"],
             "po_number": po["po_number"],
             "product_id": item["product_id"],
-            "product_name": item["product_name"],
-            "sku": item["sku"],
+            "product_name": item.get("product_name", ""),
+            "sku": item.get("sku", ""),
             "expected_qty": item["quantity"],
             "received_qty": 0.0,
             "quantity": 0.0,
-            "unit": item["unit"],
+            "unit": item.get("unit", "meter"),
             "warehouse_id": po["warehouse_id"],
-            "warehouse_name": po["warehouse_name"],
-            "warehouse_city": po.get("warehouse_city", ""),
+            "warehouse_name": wh_name,
+            "warehouse_city": wh_city,
+            "supplier_name": po.get("supplier_name", ""),
             "bin_id": "", "batch": "", "lot": "", "roll_id": "",
             "status": stages[0], "stages": stages, "scan_log": [],
             "escalation": None,
@@ -43,7 +52,7 @@ async def _create_inbound_tasks_for_po(po: Dict[str, Any]) -> None:
 @router.get("/purchase-orders")
 async def list_purchase_orders(request: Request, entity_id: str = None) -> List[Dict[str, Any]]:
     """List all purchase orders."""
-    await require_permission(request, "product", "view")  # Reuse product permission for now
+    await require_permission(request, "purchase_order", "view")
 
     query = {}
     if entity_id and entity_id != "all":
@@ -59,7 +68,7 @@ async def create_purchase_order(payload: PurchaseOrderCreate, request: Request) 
     
     This will auto-create an inbound receiving task.
     """
-    actor = await require_permission(request, "product", "create")
+    actor = await require_permission(request, "purchase_order", "create")
     
     # Validate warehouse
     warehouse = safe_doc(await db.warehouses.find_one({"id": payload.warehouse_id}, {"_id": 0}))
@@ -228,7 +237,7 @@ async def reject_purchase_order(po_id: str, request: Request) -> Dict[str, Any]:
 @router.get("/purchase-orders/{po_id}")
 async def get_purchase_order(po_id: str, request: Request) -> Dict[str, Any]:
     """Get purchase order detail."""
-    await require_permission(request, "product", "view")
+    await require_permission(request, "purchase_order", "view")
     
     po = safe_doc(await db.purchase_orders.find_one({"id": po_id}, {"_id": 0}))
     if not po:
@@ -244,7 +253,7 @@ async def get_purchase_order(po_id: str, request: Request) -> Dict[str, Any]:
 @router.post("/purchase-orders/{po_id}/cancel")
 async def cancel_purchase_order(po_id: str, request: Request) -> Dict[str, Any]:
     """Cancel a purchase order."""
-    actor = await require_permission(request, "product", "update")
+    actor = await require_permission(request, "purchase_order", "update")
     
     po = await db.purchase_orders.find_one({"id": po_id}, {"_id": 0})
     if not po:
